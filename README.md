@@ -1,1 +1,1 @@
-Projects that I have worked on or created will be hosted here.
+Projects that I'm currently working on or finished.

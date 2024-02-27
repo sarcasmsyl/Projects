@@ -1,0 +1,1 @@
+This folder is needed and video/mp4 files will be put in here. You can delete this file at any time.

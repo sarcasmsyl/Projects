@@ -1,1 +1,1 @@
-delete
+This folder is needed but meant to be empty, audio/mp3 files will end up here. You can delete this file anytime.

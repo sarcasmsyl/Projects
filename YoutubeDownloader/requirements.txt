@@ -1,0 +1,4 @@
+tk==0.1.0
+customtkinter==5.2.2
+python-vlc==3.0.20123
+pytube==15.0.0

@@ -1,11 +1,8 @@
 from pytube import YouTube
 from pytube.exceptions import RegexMatchError
-
 import tkinter as tk
-from tkinter import messagebox
 from tkinter import *
 import customtkinter
-
 import vlc
 
 # --- Settings
@@ -132,7 +129,7 @@ class AppWindow():
     customtkinter.set_default_color_theme('dark-blue')
     root.geometry(f"{Width}x{Height}")
     root.title('Youtube Downloader')
-    root.iconbitmap('YoutubeDownloader\Assets\youtubeicon.ico')
+    root.iconbitmap('YoutubeDownloader\Assets\youtubeicon.ico') #Might need to change this based on the name of your folder.
 
     # --- Create Frame inside window
     frame.pack(pady=12, padx=20, fill='both', expand=True)

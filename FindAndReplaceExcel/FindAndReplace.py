@@ -7,6 +7,7 @@ OUTPUT_DIR = BASE_DIR / "Output"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+#Add what you want to find and replace in this dictionary, left is what you are looking for, right is what you are replacing it with.
 find_and_replace = {'special double quote' : '"', 'special single quote': "'", "°" : " Degrees", "™" : "", "®" : "", "©" : "", "pie" : "applie_pie"}
 
 files = list(INPUT_DIR.rglob("*.xls*"))

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: blue;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .button {
+            display: inline-block;
+            padding: 5px 10px;
+            margin-top: 10px;
+            margin-right: 10px;
+            font-size: 16px;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .download-button {
+            display: none;
+        }
+        .info-text {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+    <script>
+        function handleFileUpload(inputId, buttonId) {
+            const input = document.getElementById(inputId);
+            const button = document.getElementById(buttonId);
+
+            input.addEventListener('change', () => {
+                if (input.files.length > 0) {
+                    button.style.display = 'inline-block';
+                } else {
+                    button.style.display = 'none';
+                }
+            });
+        }
+
+        function handleFormSubmit(event, formId) {
+            event.preventDefault();
+            const form = document.getElementById(formId);
+            const formData = new FormData(form);
+            formData.append(formId, 'true');  // Add a form-specific identifier
+
+            fetch('/tools/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+                // Handle success, such as showing a success message or updating the UI
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Handle error, such as showing an error message
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            handleFileUpload('FindAndReplace', 'FindAndReplaceDownload');
+            handleFileUpload('ImageCheck', 'ImageCheckDownload');
+
+            document.getElementById('findAndReplaceForm').addEventListener('submit', function(event) {
+                handleFormSubmit(event, 'findAndReplaceForm');
+            });
+
+            document.getElementById('imageCheckForm').addEventListener('submit', function(event) {
+                handleFormSubmit(event, 'imageCheckForm');
+            });
+        });
+    </script>
+</head>
+<body>
+    <div class="section">
+        <h1>Find and Replace Tool</h1>
+        <div class="info-text">Make sure your Import page is the first page of your Excel file, the tool currently only checks the first page.</div>
+        <div class="info-text">The tool will remove and replace these special characters: ” “ ─ – — ’ ‘ ° ™ ® © … ½ ¼ ⅛.</div>
+        <div class="info-text">It will also remove double spaces and replace them with single spaces.</div>
+        <br>
+        <form id="findAndReplaceForm">
+            <input type="file" id="FindAndReplace" name="filename" class="button" accept=".xls,.xlsx,.csv">
+            <input type="submit" class="button">
+        </form>
+        <a id="FindAndReplaceDownload" class="button download-button">Download</a>
+    </div>
+    
+    <div class="section">
+        <h1>Image Checking Tool</h1>
+        <div class="info-text">Have 2 columns, one titled SKUs and one titled Images. The tool will check the images.</div>
+        <br>
+        <form id="imageCheckForm">
+            <input type="file" id="ImageCheck" name="filename" class="button">
+            <input type="submit" class="button">
+        </form>
+        <a id="ImageCheckDownload" class="button download-button">Download</a>
+    </div>
+</body>
+</html>

@@ -1,10 +1,22 @@
-import discord, asyncio, os, botinfo, sqlite3, random, math
+import discord, asyncio, os, botinfo, sqlite3, random, math, praw
 from discord.ext import commands
 import gamedata as gdata
 from game import create_game, GameState, Card, Deck, Player, Monster
 from functions import RandomChamp
 from datetime import datetime, timedelta
 from database_setup import setup_database
+from opggscraper import get_player_stats_from_url, check_solo_duo_rank
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import requests
+import os
+
+
+# --- BOT SETTINGS AND PRESET VARS --- #
 
 # Define intents
 intents = discord.Intents.all()
@@ -19,19 +31,36 @@ game_sessions = {}
 # Setup Database
 setup_database()
 
+# Initialize Reddit API
+reddit = praw.Reddit(
+    client_id="Replace", # Replace with your Reddit Client ID
+    client_secret="Replace", # Replace with your Reddit Client Secret
+    user_agent="discord-meme-bot"   # Replace with a descriptive name, e.g., "discord-meme-bot"
+)
+
+# --- Phased out keys (No longer in use) --- #
+'''
+# Humor API Settings
+HUMOR_API_KEY = "Replace"
+HUMOR_API_URL = "https://api.humorapi.com/memes/random"
+'''
+# --- BOT COMMANDS --- #
+
 @bot.event
 async def on_ready():
     print(f'Bot is ready. Logged in as {bot.user}')
 
-# Basic Text Stuff
+# Ping Command (Replies with 'Pong!')
 @bot.command()
 async def ping(ctx):
     await ctx.send('Pong!')
 
+# Echo Text
 @bot.command()
 async def echo(ctx, *, message):
     await ctx.send(message)
 
+# --- Image Related Commands --- #
 # Pokemon Image
 @bot.command()
 async def randompokemon(ctx):
@@ -57,6 +86,7 @@ async def randompokemon(ctx):
     # Send the image and the file name
     await ctx.send(f"A wild {file_name} has appeared!\n", file=discord.File(random_image_path))
 
+# --- Roll Related Commands --- #
 # Roll
 @bot.command()
 async def roll(ctx):
@@ -80,22 +110,12 @@ async def randomchamp(ctx):
     roll = RandomChamp()
     await ctx.send(roll)
 
-# Basic Arithmetic
+# --- Basic Arithmetic --- #
 # Helper function to format results
 def format_result(value):
     if isinstance(value, float) and value.is_integer():
         return int(value)
     return value
-
-# Error handler for invalid argument type
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.BadArgument):
-        await ctx.send("Invalid input. Please provide valid numbers.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"Usage: {ctx.prefix}{ctx.command} <number1> <number2>")
-    else:
-        await ctx.send("An error occurred. Please try again.")
 
 # Command to add two numbers
 @bot.command()
@@ -147,7 +167,71 @@ async def divide(ctx, a: float = None, b: float = None):
         formatted_result = format_result(result)
         await ctx.send(f"{formatted_a} / {formatted_b} = {formatted_result}")
 
-# Game Related
+# --- Error Handling --- #
+# Error handler for invalid argument type
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.BadArgument):
+        await ctx.send("Invalid input. Please provide valid numbers.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"Usage: {ctx.prefix}{ctx.command} <number1> <number2>")
+    else:
+        await ctx.send("An error occurred. You may have input an invalid command.")
+
+# Command to perform a countdown and post a random emoji
+@bot.command()
+async def random_emoji(ctx):
+    """Counts down from 5 and posts a random emoji with a specific message."""
+    try:
+        # Define interjecting messages from different bot personalities
+        interjecting_messages = [
+            # ChatGPT-like messages
+            "Patience is key—it's almost here!",
+            "Let's stay calm and see what happens next!",
+            "I hope this ends well for you. 😊",
+            # JimBot-like messages
+            "Don't get your hopes up; this might be hilarious.",
+            "Calling it now—it's gonna be 💩.",
+            "Why are we even doing this? Oh, right—because it's funny.",
+            # KawaiiBot-like messages
+            "Ooh, I'm so excited! This is so fun! ✨",
+            "What if it's the BEST outcome?! Let's hope! 😊",
+            "Kawaii suspense is the best kind of suspense! 💖"
+        ]
+
+        # List of emojis with corresponding messages
+        emoji_messages = {
+            "💩": "Lmao you got shit! 💩",
+            "🎉": "Congrats, you're a winner! 🎉",
+            "😎": "Cool as ice! You got the sunglasses emoji! 😎",
+            "😢": "Oh no, it's a sad day! 😢 But don't worry, better luck next time!",
+            "🍕": "Yum! Pizza party time! 🍕 You're a slice above the rest!",
+        }
+
+        # Perform the countdown
+        for i in range(5, 0, -1):
+            await ctx.send(f"{i}...")
+            await asyncio.sleep(1)
+
+            # Add interjecting messages between countdown ticks
+            if i > 1:  # Avoid sending suspense message after the last tick
+                suspense_message = random.choice(interjecting_messages)
+                await ctx.send(suspense_message)
+                await asyncio.sleep(1)  # Short pause after the message
+
+        # Randomly choose an emoji
+        emoji = random.choice(list(emoji_messages.keys()))
+        message = emoji_messages[emoji]
+
+        # Send the corresponding message
+        await ctx.send(message)
+
+    except Exception as e:
+        # Handle unexpected errors gracefully
+        await ctx.send("Something went wrong during the countdown. Please try again later.")
+        print(f"Error during countdown: {e}")
+
+# --- Game Related --- #
 # Command: Store Data
 @bot.command()
 async def store(ctx, *, data):
@@ -542,6 +626,146 @@ async def perform_coin_flip(ctx, amount, choice):
 
         await ctx.send(result_message, file=discord.File(image_path))
 
+# --- Flow OPGG Points Calculation --- #
+@bot.command()
+async def points(ctx, url: str):
+    # Validate the URL
+    if not url.startswith("https://www.op.gg/summoners/"):
+        await ctx.send("Invalid URL. Please provide a valid OP.GG profile URL (must include 'www'). \n Usage: !points <op.gg url> \n ex: !points https://www.op.gg/summoners/na/Sarcasm-Lol")
+        return
+
+    # Check for Solo/Duo rank
+    if not check_solo_duo_rank(url):
+        await ctx.send(
+            "Sorry but this account can not participate in the Tournament due to having no Solo/Duo rank"
+        )
+        return
+
+    # Fetch player stats
+    try:
+        result = get_player_stats_from_url(url)
+        await ctx.send(result)
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
+    else:
+        await ctx.send("Usage: !points <op.gg url>")
+
+# Command to test scraping elements
+@bot.command()
+async def scrapetest(ctx, url: str, element_class: str):
+    # Set up Chrome options
+    chrome_options = Options()
+    chrome_options.add_argument("--ignore-certificate-errors")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.140 Safari/537.36")
+    chrome_options.add_argument("--headless=new")
+
+    chrome_service = Service("opggscraper\\chromedriver-win64\\chromedriver.exe")
+    driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+    driver.get(url)
+
+    try:
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+        # Attempt to find the specified element
+        try:
+            element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, element_class)))
+            await ctx.send(f"Element with class `{element_class}` found:\n`{element.text}`")
+        except:
+            await ctx.send(f"Element with class `{element_class}` not found.")
+
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
+    finally:
+        driver.quit()
+
+# --- Commands with API Requests --- #
+# Command to fetch memes from a subreddit
+@bot.command()
+async def meme(ctx):
+    subreddit = reddit.subreddit("memes")  # Choose a meme subreddit
+    posts = list(subreddit.hot(limit=50))  # Get top 50 hot posts
+
+    # Choose a random meme post
+    post = random.choice(posts)
+
+    # Ensure it's an image post
+    if post.url.endswith(("jpg", "jpeg", "png", "gif")) or "imgur.com" in post.url:
+        await ctx.send(f"**{post.title}**\n{post.url}")
+    else:
+        await ctx.send("Couldn't find an image meme, try again!")
+
+# Command to fetch posts from pcmasterrace
+@bot.command()
+async def pcmasterrace(ctx):
+    subreddit = reddit.subreddit("pcmasterrace")  # Choose a meme subreddit
+    posts = list(subreddit.hot(limit=50))  # Get top 50 hot posts
+
+    # Choose a random meme post
+    post = random.choice(posts)
+
+    # Ensure it's an image post
+    if post.url.endswith(("jpg", "jpeg", "png", "gif")) or "imgur.com" in post.url:
+        await ctx.send(f"**{post.title}**\n{post.url}")
+    else:
+        await ctx.send("Couldn't find an image meme, try again!")
+
+# Command to fetch posts from webcomics
+@bot.command()
+async def webcomics(ctx):
+    subreddit = reddit.subreddit("webcomics")  # Choose a meme subreddit
+    posts = list(subreddit.hot(limit=50))  # Get top 50 hot posts
+
+    # Choose a random meme post
+    post = random.choice(posts)
+
+    # Ensure it's an image post
+    if post.url.endswith(("jpg", "jpeg", "png", "gif")) or "imgur.com" in post.url:
+        await ctx.send(f"**{post.title}**\n{post.url}")
+    else:
+        await ctx.send("Couldn't find an image meme, try again!")
+
+# More memes command selecting from multiple subreddits
+@bot.command()
+async def morememes(ctx):
+    meme_subreddits = [
+        "memes",
+        "dankmemes",
+        "funny",
+        "wholesomememes",
+        "me_irl",
+        "historymemes",
+        "techsupportgore",
+        "programmerhumor",
+        "terriblefacebookmemes",
+        "webcomics",
+        "pcmasterrace",
+        "WTF"
+    ]
+
+    chosen_subreddit = random.choice(meme_subreddits)
+
+    try:
+        subreddit = reddit.subreddit(chosen_subreddit)
+        found_meme = None
+
+        for submission in subreddit.hot(limit=20):
+            if not submission.stickied and submission.url.endswith(("jpg", "jpeg", "png", "gif")) or "imgur.com" in submission.url:
+                if found_meme is None:
+                    found_meme = submission.url  # Store the first valid meme
+                else:
+                    await ctx.send(f"r/{chosen_subreddit} \n **{submission.title}** \n {submission.url}")
+                    return
+
+        if found_meme:
+            await ctx.send(f"r/{chosen_subreddit} \n {found_meme}")
+        else:
+            await ctx.send("Couldn't find a meme at the moment.")
+
+    except Exception as e:
+        await ctx.send(f"Error fetching meme: {e}")
+        print(f"Error fetching meme: {e}")
 
 try:
     bot.run(botinfo.key)
